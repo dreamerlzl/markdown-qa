@@ -15,7 +15,7 @@ class QuestionAnswerer:
         self,
         retrieval_engine: RetrievalEngine,
         api_config: Optional[APIConfig] = None,
-        model: str = "qwen-flash",
+        model: Optional[str] = None,
     ):
         """
         Initialize question answerer.
@@ -24,6 +24,7 @@ class QuestionAnswerer:
             retrieval_engine: Retrieval engine for finding relevant chunks.
             api_config: API configuration. If None, creates from defaults.
             model: LLM model name to use for answering questions.
+                   If None, uses the model from api_config.
         """
         self.retrieval_engine = retrieval_engine
         if api_config is None:
@@ -33,7 +34,7 @@ class QuestionAnswerer:
             base_url=api_config.base_url,
             api_key=api_config.api_key,
         )
-        self.model = model
+        self.model = model if model is not None else api_config.llm_model
 
     def answer(
         self, question: str, k: int = 5, min_relevance_threshold: float = 0.0

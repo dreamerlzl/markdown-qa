@@ -30,6 +30,7 @@ class APIConfig:
         self.base_url: Optional[str] = None
         self.api_key: Optional[str] = None
         self.embedding_model: Optional[str] = None
+        self.llm_model: Optional[str] = None
 
         # Try to load from config file first
         if config_file:
@@ -48,10 +49,16 @@ class APIConfig:
             self.api_key = os.environ.get("MARKDOWN_QA_API_KEY")
         if not self.embedding_model:
             self.embedding_model = os.environ.get("MARKDOWN_QA_EMBEDDING_MODEL")
+        if not self.llm_model:
+            self.llm_model = os.environ.get("MARKDOWN_QA_LLM_MODEL")
 
         # Set default embedding model if not specified
         if not self.embedding_model:
             self.embedding_model = "text-embedding-3-small"
+
+        # Set default LLM model if not specified
+        if not self.llm_model:
+            self.llm_model = "qwen-flash"
 
         # Validate that we have required configuration
         if not self.base_url or not self.api_key:
@@ -83,6 +90,7 @@ class APIConfig:
                 self.base_url = config["api"].get("base_url") or self.base_url
                 self.api_key = config["api"].get("api_key") or self.api_key
                 self.embedding_model = config["api"].get("embedding_model") or self.embedding_model
+                self.llm_model = config["api"].get("llm_model") or self.llm_model
 
     def _load_from_toml(self, config_path: Path) -> None:
         """Load configuration from TOML file."""
@@ -92,3 +100,4 @@ class APIConfig:
                 self.base_url = config["api"].get("base_url") or self.base_url
                 self.api_key = config["api"].get("api_key") or self.api_key
                 self.embedding_model = config["api"].get("embedding_model") or self.embedding_model
+                self.llm_model = config["api"].get("llm_model") or self.llm_model
