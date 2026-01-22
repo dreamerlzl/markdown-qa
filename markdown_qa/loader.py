@@ -6,6 +6,22 @@ from pathlib import Path
 from typing import List, Tuple
 
 
+def count_markdown_files(directory: str) -> int:
+    """
+    Count the number of markdown files in a directory recursively.
+
+    Args:
+        directory: Path to directory to count markdown files in.
+
+    Returns:
+        Number of markdown files found, or 0 if directory doesn't exist.
+    """
+    dir_path = Path(directory)
+    if not dir_path.exists() or not dir_path.is_dir():
+        return 0
+    return len(list(dir_path.rglob("*.md")))
+
+
 def load_markdown_files(directories: List[str]) -> List[Tuple[Path, str]]:
     """
     Load all markdown files from specified directories recursively.

@@ -7,6 +7,8 @@ from typing import List, Optional
 import yaml
 
 from markdown_qa.config import APIConfig
+from markdown_qa.loader import count_markdown_files
+from markdown_qa.logger import get_server_logger
 
 try:
     import tomli  # type: ignore[import-not-found]
@@ -176,15 +178,45 @@ class ServerConfig:
 
     def _validate(self) -> None:
         """Validate server configuration."""
+        logger = get_server_logger()
+
         if not self.directories:
             raise ValueError(
                 "No directories specified. Set MARKDOWN_QA_DIRECTORIES environment variable "
                 "or provide directories in configuration."
             )
 
+        # Validate each directory and check markdown file counts
+        valid_directories: List[str] = []
         for directory in self.directories:
             if not Path(directory).exists():
                 raise ValueError(f"Directory does not exist: {directory}")
+
+            # Count markdown files in this directory
+            file_count = count_markdown_files(directory)
+
+            if file_count > 1000:
+                logger.error(
+                    f"Directory '{directory}' contains {file_count} markdown files "
+                    f"(>1000). Skipping this directory to prevent performance issues."
+                )
+                continue
+            elif file_count > 100:
+                logger.warning(
+                    f"Directory '{directory}' contains {file_count} markdown files "
+                    f"(>100). This may impact performance."
+                )
+
+            valid_directories.append(directory)
+
+        # Update directories to only include valid ones
+        if not valid_directories:
+            raise ValueError(
+                "No valid directories remaining after validation. "
+                "All directories were skipped due to having too many files (>1000)."
+            )
+
+        self.directories = valid_directories
 
         if self.port < 1 or self.port > 65535:
             raise ValueError(f"Invalid port number: {self.port}")
