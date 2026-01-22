@@ -3,6 +3,7 @@
 import os
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -67,6 +68,10 @@ class TestServerConfig:
             doc_dir1.mkdir()
             doc_dir2.mkdir()
 
+            # Use a non-existent config file path to ensure env var is used
+            fake_config_dir = Path(tmpdir) / "no_config"
+            fake_config_yaml = fake_config_dir / "config.yaml"
+
             api_config = type("MockAPIConfig", (), {
                 "base_url": "https://api.example.com",
                 "api_key": "test-key",
@@ -75,10 +80,12 @@ class TestServerConfig:
             os.environ["MARKDOWN_QA_DIRECTORIES"] = f"{doc_dir1},{doc_dir2}"
 
             try:
-                config = ServerConfig(api_config=api_config)
-                assert len(config.directories) == 2
-                assert str(doc_dir1) in config.directories
-                assert str(doc_dir2) in config.directories
+                with patch("markdown_qa.server_config.ServerConfig.DEFAULT_CONFIG_YAML", fake_config_yaml), \
+                     patch("markdown_qa.server_config.ServerConfig.DEFAULT_CONFIG_TOML", fake_config_dir / "config.toml"):
+                    config = ServerConfig(api_config=api_config)
+                    assert len(config.directories) == 2
+                    assert str(doc_dir1) in config.directories
+                    assert str(doc_dir2) in config.directories
             finally:
                 del os.environ["MARKDOWN_QA_DIRECTORIES"]
 

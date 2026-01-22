@@ -41,6 +41,19 @@ class ServerConfig:
             index_name: Name of the index to use. If None, reads from config file or uses default ("default").
             config_file: Optional path to config file. If None, checks default locations.
         """
+        # Track which settings were provided via CLI args (should be preserved on reload)
+        self._cli_overrides: set = set()
+        if port is not None:
+            self._cli_overrides.add("port")
+        if directories is not None:
+            self._cli_overrides.add("directories")
+        if reload_interval is not None:
+            self._cli_overrides.add("reload_interval")
+        if index_name is not None:
+            self._cli_overrides.add("index_name")
+        if api_config is not None:
+            self._cli_overrides.add("api_config")
+
         # Load from config file first (if not provided via CLI args)
         config_data = self._load_config_file(config_file)
 
@@ -224,37 +237,46 @@ class ServerConfig:
         changed = []
         requires_restart = False
 
+        # Helper to check if a setting should be updated
+        def should_update(setting: str) -> bool:
+            """Return True if the setting should be updated from config file."""
+            if not preserve_cli_overrides:
+                return True
+            # When preserving CLI overrides, only skip if the setting was CLI-provided
+            return setting not in self._cli_overrides
+
         # Port changes require restart
-        if not preserve_cli_overrides or "port" in config_data:
+        if "port" in config_data:
             new_port = config_data.get("port", self.port)
             if new_port != self.port:
                 changed.append("port")
                 requires_restart = True
-                if not preserve_cli_overrides:
+                # Port changes are deferred until restart, only apply if not CLI-provided
+                if should_update("port"):
                     self.port = new_port
 
         # Directories can be hot-reloaded
-        if not preserve_cli_overrides or "directories" in config_data:
+        if "directories" in config_data:
             new_directories = config_data.get("directories") or self._get_directories_from_env()
             if new_directories != self.directories:
                 changed.append("directories")
-                if not preserve_cli_overrides:
+                if should_update("directories"):
                     self.directories = new_directories
 
         # Reload interval can be hot-reloaded
-        if not preserve_cli_overrides or "reload_interval" in config_data:
+        if "reload_interval" in config_data:
             new_reload_interval = config_data.get("reload_interval", self.reload_interval)
             if new_reload_interval != self.reload_interval:
                 changed.append("reload_interval")
-                if not preserve_cli_overrides:
+                if should_update("reload_interval"):
                     self.reload_interval = new_reload_interval
 
         # Index name can be hot-reloaded
-        if not preserve_cli_overrides or "index_name" in config_data:
+        if "index_name" in config_data:
             new_index_name = config_data.get("index_name", self.index_name)
             if new_index_name != self.index_name:
                 changed.append("index_name")
-                if not preserve_cli_overrides:
+                if should_update("index_name"):
                     self.index_name = new_index_name
 
         # Reload API config
@@ -266,7 +288,7 @@ class ServerConfig:
                     or new_api_config.api_key != self.api_config.api_key
                 ):
                     changed.append("api_config")
-                    if not preserve_cli_overrides:
+                    if should_update("api_config"):
                         self.api_config = new_api_config
             except Exception:
                 # If API config reload fails, keep existing
