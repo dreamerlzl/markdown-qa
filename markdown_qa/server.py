@@ -103,7 +103,9 @@ class MarkdownQAServer:
                     await websocket.send(json.dumps(response))  # type: ignore[attr-defined]
                     if response.get("type") == MessageType.STREAM_CHUNK:
                         chunk_count += 1
-                        self.logger.debug(f"Sent chunk: {response.get('chunk', '')[:50]}...")
+                        self.logger.debug(
+                            f"Sent chunk: {response.get('chunk', '')[:50]}..."
+                        )
 
                 request_ms = (time.perf_counter() - request_start) * 1000
                 self.logger.info(
@@ -135,7 +137,9 @@ class MarkdownQAServer:
 
             await websocket.send(json.dumps(create_status_message(status, msg)))  # type: ignore[attr-defined]
             request_ms = (time.perf_counter() - request_start) * 1000
-            self.logger.info(f"request_completed type=status request_ms={request_ms:.2f}")
+            self.logger.info(
+                f"request_completed type=status request_ms={request_ms:.2f}"
+            )
 
         else:
             await websocket.send(  # type: ignore[attr-defined]
@@ -173,9 +177,7 @@ class MarkdownQAServer:
 
             # Check if we fell back to full rebuild
             if result.fallback_to_full_rebuild:
-                self.logger.info(
-                    f"Performed full rebuild (reason: {result.reason})"
-                )
+                self.logger.info(f"Performed full rebuild (reason: {result.reason})")
                 return
 
             # Log incremental update results
@@ -203,6 +205,12 @@ class MarkdownQAServer:
     def _reload_config(self) -> None:
         """Reload configuration from file (called by config watcher)."""
         try:
+            # Store old directories and index_name before reload
+            old_directories_set = set(
+                self.config.directories.copy() if self.config.directories else []
+            )
+            old_index_name = self.config.index_name
+
             result = self.config.reload(preserve_cli_overrides=True)
 
             if not result.has_changes:
@@ -220,8 +228,58 @@ class MarkdownQAServer:
 
             # Handle hot-reloadable changes
             if "directories" in result.changed or "index_name" in result.changed:
-                self.logger.info("Reloading indexes due to configuration change...")
-                self._reload_indexes(force=True)
+                # If index_name changed, always do full rebuild
+                if "index_name" in result.changed:
+                    self.logger.info("Index name changed, performing full rebuild...")
+                    self._reload_indexes(force=True)
+                elif "directories" in result.changed:
+                    # Check if only directories were added (not removed)
+                    # Normalize paths to absolute for comparison
+                    new_directories = {
+                        str(Path(d).resolve()) for d in self.config.directories
+                    }
+
+                    added_directories = new_directories - old_directories_set
+                    removed_directories = old_directories_set - new_directories
+
+                    if removed_directories:
+                        # Directories were removed, need full rebuild
+                        self.logger.info(
+                            f"Directories removed: {removed_directories}. "
+                            "Performing full rebuild..."
+                        )
+                        self._reload_indexes(force=True)
+                    elif added_directories:
+                        # Only new directories added, can use incremental update
+                        self.logger.info(
+                            f"New directories added: {added_directories}. "
+                            "Using incremental update to index new files..."
+                        )
+                        # Use incremental update which will detect and index new files
+                        update_result = self.index_manager.incremental_update(
+                            self.config.index_name, self.config.directories
+                        )
+
+                        if update_result.fallback_to_full_rebuild:
+                            self.logger.warning(
+                                f"Incremental update fell back to full rebuild "
+                                f"(reason: {update_result.reason})"
+                            )
+                        else:
+                            # Update manifest with new directories
+                            self.index_manager.manifest.update_index(
+                                self.config.index_name, self.config.directories
+                            )
+                            self.logger.info(
+                                f"Incremental update completed: "
+                                f"{len(update_result.added_files)} files added from new directories"
+                            )
+                    else:
+                        # Directories changed but no net additions/removals (shouldn't happen)
+                        self.logger.info(
+                            "Directories reordered, performing full rebuild..."
+                        )
+                        self._reload_indexes(force=True)
 
             if "reload_interval" in result.changed:
                 # Restart reload scheduler with new interval
