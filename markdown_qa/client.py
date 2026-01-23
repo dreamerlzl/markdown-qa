@@ -454,13 +454,13 @@ async def main() -> int:
         epilog="""
 Examples:
   # Single question mode
-  markdown-qa-client "What is Python?"
+  md-qa "What is Python?"
 
   # Interactive mode
-  markdown-qa-client
+  md-qa
 
   # Custom server
-  markdown-qa-client --server ws://localhost:9000 "What is Python?"
+  md-qa --server ws://localhost:9000 "What is Python?"
         """,
     )
     parser.add_argument(
