@@ -61,10 +61,13 @@ class TestQueryHandler:
              patch("markdown_qa.query_handler.ResponseFormatter") as mock_fmt:
             
             mock_answerer = MagicMock()
-            mock_answerer.answer.return_value = (
-                "Answer text",
+            # Mock the new separate methods used by handle_query
+            mock_answerer.retrieve.return_value = (
+                "Retrieved context",
                 ["/path/to/doc.md"],
             )
+            mock_answerer._build_prompt.return_value = "Formatted prompt"
+            mock_answerer._generate_answer.return_value = "Answer text"
             mock_qa.return_value = mock_answerer
             
             mock_formatter = MagicMock()

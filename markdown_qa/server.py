@@ -3,6 +3,7 @@
 import asyncio
 import json
 import signal
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -82,6 +83,7 @@ class MarkdownQAServer:
             websocket: WebSocket connection.
             message: Message dictionary.
         """
+        request_start = time.perf_counter()
         msg_type = message.get("type")
         self.logger.info(f"Received message: {message}")
 
@@ -95,19 +97,29 @@ class MarkdownQAServer:
                 return
 
             # Handle query with streaming response
+            chunk_count = 0
             try:
                 for response in self.query_handler.handle_query_stream(message):
                     await websocket.send(json.dumps(response))  # type: ignore[attr-defined]
                     if response.get("type") == MessageType.STREAM_CHUNK:
+                        chunk_count += 1
                         self.logger.debug(f"Sent chunk: {response.get('chunk', '')[:50]}...")
-                self.logger.info("Query streaming completed")
+
+                request_ms = (time.perf_counter() - request_start) * 1000
+                self.logger.info(
+                    f"request_completed type=query request_ms={request_ms:.2f} chunks={chunk_count}"
+                )
             except Exception as e:
                 # If query handling fails, send error response
                 error_response = create_error_message(
                     f"Error processing query: {str(e)}"
                 )
                 await websocket.send(json.dumps(error_response))  # type: ignore[attr-defined]
-                self.logger.error(f"Error in query handler: {e}", exc_info=True)
+                request_ms = (time.perf_counter() - request_start) * 1000
+                self.logger.error(
+                    f"request_error type=query request_ms={request_ms:.2f} error={e}",
+                    exc_info=True,
+                )
 
         elif msg_type == MessageType.STATUS:
             # Client requesting status
@@ -122,10 +134,16 @@ class MarkdownQAServer:
                 msg = "Server loading indexes"
 
             await websocket.send(json.dumps(create_status_message(status, msg)))  # type: ignore[attr-defined]
+            request_ms = (time.perf_counter() - request_start) * 1000
+            self.logger.info(f"request_completed type=status request_ms={request_ms:.2f}")
 
         else:
             await websocket.send(  # type: ignore[attr-defined]
                 json.dumps(create_error_message(f"Unknown message type: {msg_type}"))
+            )
+            request_ms = (time.perf_counter() - request_start) * 1000
+            self.logger.warning(
+                f"request_completed type=unknown request_ms={request_ms:.2f} msg_type={msg_type}"
             )
 
     def _reload_indexes(self, force: bool = False) -> None:
@@ -171,6 +189,12 @@ class MarkdownQAServer:
                 f"{len(result.modified_files)} modified, "
                 f"{len(result.deleted_files)} deleted"
             )
+            if result.added_files:
+                self.logger.info(f"  Added: {result.added_files}")
+            if result.modified_files:
+                self.logger.info(f"  Modified: {result.modified_files}")
+            if result.deleted_files:
+                self.logger.info(f"  Deleted: {result.deleted_files}")
 
         except Exception as e:
             # Log error but don't crash

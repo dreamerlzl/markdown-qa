@@ -2,9 +2,11 @@
 
 import logging
 import sys
+import time
+from contextlib import contextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Optional
+from typing import Generator, Optional
 
 
 def setup_logger(
@@ -97,3 +99,73 @@ def get_server_logger() -> logging.Logger:
     if _server_logger is None:
         _server_logger = setup_logger("server")
     return _server_logger
+
+
+class LatencyTracker:
+    """Tracks latency for multiple operations within a request."""
+
+    def __init__(self) -> None:
+        """Initialize latency tracker."""
+        self._start_time: Optional[float] = None
+        self._timings: dict[str, float] = {}
+
+    def start(self) -> None:
+        """Start the overall request timer."""
+        self._start_time = time.perf_counter()
+
+    @contextmanager
+    def track(self, operation: str) -> Generator[None, None, None]:
+        """
+        Context manager to track latency of an operation.
+
+        Args:
+            operation: Name of the operation being tracked.
+
+        Yields:
+            None
+        """
+        op_start = time.perf_counter()
+        try:
+            yield
+        finally:
+            elapsed_ms = (time.perf_counter() - op_start) * 1000
+            self._timings[operation] = elapsed_ms
+
+    def get_timing(self, operation: str) -> Optional[float]:
+        """
+        Get the timing for a specific operation.
+
+        Args:
+            operation: Name of the operation.
+
+        Returns:
+            Elapsed time in milliseconds, or None if not tracked.
+        """
+        return self._timings.get(operation)
+
+    def get_total_ms(self) -> float:
+        """
+        Get total elapsed time since start() was called.
+
+        Returns:
+            Total elapsed time in milliseconds.
+        """
+        if self._start_time is None:
+            return 0.0
+        return (time.perf_counter() - self._start_time) * 1000
+
+    def format_log(self, prefix: str = "") -> str:
+        """
+        Format all tracked timings as a structured log string.
+
+        Args:
+            prefix: Optional prefix for the log message.
+
+        Returns:
+            Formatted log string with all timings.
+        """
+        parts = [prefix] if prefix else []
+        parts.append(f"total_ms={self.get_total_ms():.2f}")
+        for op, ms in self._timings.items():
+            parts.append(f"{op}_ms={ms:.2f}")
+        return " ".join(parts)

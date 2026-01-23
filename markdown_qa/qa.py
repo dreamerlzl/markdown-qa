@@ -131,23 +131,20 @@ Please provide a clear and concise answer based on the context above. If the con
         except Exception as e:
             raise RuntimeError(f"Failed to generate answer: {e}") from e
 
-    def answer_stream(
+    def retrieve(
         self, question: str, k: int = 5, min_relevance_threshold: float = 0.0
-    ) -> Generator[Tuple[str, Optional[List[str]]], None, None]:
+    ) -> Tuple[str, List[str]]:
         """
-        Answer a question using retrieved context, streaming the response.
-
-        Yields chunks of the answer as they are generated. The final yield
-        includes the sources.
+        Retrieve relevant context for a question.
 
         Args:
             question: The question to answer.
             k: Number of relevant chunks to retrieve.
             min_relevance_threshold: Minimum relevance score.
 
-        Yields:
-            Tuples of (chunk, sources) where sources is None for intermediate
-            chunks and a list of file paths for the final chunk.
+        Returns:
+            Tuple of (context, sources) where context is the formatted text
+            and sources is a list of file paths.
 
         Raises:
             ValueError: If no relevant content is found.
@@ -179,7 +176,50 @@ Please provide a clear and concise answer based on the context above. If the con
         # Build context
         context = "\n\n---\n\n".join(context_parts)
 
-        # Generate answer using streaming
+        return context, sources
+
+    def answer_stream(
+        self, question: str, k: int = 5, min_relevance_threshold: float = 0.0
+    ) -> Generator[Tuple[str, Optional[List[str]]], None, None]:
+        """
+        Answer a question using retrieved context, streaming the response.
+
+        Yields chunks of the answer as they are generated. The final yield
+        includes the sources.
+
+        Args:
+            question: The question to answer.
+            k: Number of relevant chunks to retrieve.
+            min_relevance_threshold: Minimum relevance score.
+
+        Yields:
+            Tuples of (chunk, sources) where sources is None for intermediate
+            chunks and a list of file paths for the final chunk.
+
+        Raises:
+            ValueError: If no relevant content is found.
+        """
+        # Retrieve and stream
+        context, sources = self.retrieve(question, k=k, min_relevance_threshold=min_relevance_threshold)
+        yield from self.stream_with_context(question, context, sources)
+
+    def stream_with_context(
+        self, question: str, context: str, sources: List[str]
+    ) -> Generator[Tuple[str, Optional[List[str]]], None, None]:
+        """
+        Stream an answer using pre-retrieved context.
+
+        This method is useful when you want to time retrieval and LLM separately.
+
+        Args:
+            question: The question to answer.
+            context: Pre-retrieved context string.
+            sources: List of source file paths.
+
+        Yields:
+            Tuples of (chunk, sources) where sources is None for intermediate
+            chunks and a list of file paths for the final chunk.
+        """
         prompt = self._build_prompt(question, context)
 
         try:
