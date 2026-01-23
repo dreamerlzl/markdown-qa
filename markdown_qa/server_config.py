@@ -33,7 +33,7 @@ class ConfigReloadResult:
 class ServerConfig:
     """Manages server configuration."""
 
-    DEFAULT_CONFIG_DIR = Path.home() / ".markdown-qa"
+    DEFAULT_CONFIG_DIR = Path.home() / ".md-qa"
     DEFAULT_CONFIG_YAML = DEFAULT_CONFIG_DIR / "config.yaml"
     DEFAULT_CONFIG_TOML = DEFAULT_CONFIG_DIR / "config.toml"
 

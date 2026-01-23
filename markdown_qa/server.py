@@ -421,7 +421,7 @@ async def main() -> None:
         epilog="""
 Configuration precedence (highest to lowest):
   1. Command-line arguments
-  2. Config file (~/.markdown-qa/config.yaml or config.toml)
+  2. Config file (~/.md-qa/config.yaml or config.toml)
   3. Environment variables
   4. Defaults
 

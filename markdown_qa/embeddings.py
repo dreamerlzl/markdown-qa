@@ -54,7 +54,7 @@ class EmbeddingGenerator:
 
         # Set up cache directory
         if cache_dir is None:
-            cache_dir = Path.home() / ".markdown-qa" / "cache" / "embeddings"
+            cache_dir = Path.home() / ".md-qa" / "cache" / "embeddings"
         self.cache_dir = cache_dir
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.logger = get_server_logger()

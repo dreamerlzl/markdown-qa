@@ -21,7 +21,7 @@ def setup_logger(
 
     Args:
         name: Logger name (e.g., 'client' or 'server').
-        log_file: Path to log file. If None, uses ~/.markdown-qa/logs/{name}.log.
+        log_file: Path to log file. If None, uses ~/.md-qa/logs/{name}.log.
         level: Logging level (default: INFO).
         max_bytes: Maximum size of log file before rotation (default: 10MB).
         backup_count: Number of backup files to keep (default: 5).
@@ -49,7 +49,7 @@ def setup_logger(
 
     # Add rotating file handler
     if log_file is None:
-        log_dir = Path.home() / ".markdown-qa" / "logs"
+        log_dir = Path.home() / ".md-qa" / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / f"{name}.log"
     else:

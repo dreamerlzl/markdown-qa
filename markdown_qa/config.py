@@ -15,7 +15,7 @@ except ImportError:
 class APIConfig:
     """Manages API configuration from config file or environment variables."""
 
-    DEFAULT_CONFIG_DIR = Path.home() / ".markdown-qa"
+    DEFAULT_CONFIG_DIR = Path.home() / ".md-qa"
     DEFAULT_CONFIG_YAML = DEFAULT_CONFIG_DIR / "config.yaml"
     DEFAULT_CONFIG_TOML = DEFAULT_CONFIG_DIR / "config.toml"
 
@@ -64,7 +64,7 @@ class APIConfig:
         if not self.base_url or not self.api_key:
             raise ValueError(
                 "API configuration is missing. Please set either:\n"
-                "- Config file at ~/.markdown-qa/config.yaml or config.toml with 'api.base_url' and 'api.api_key'\n"
+                "- Config file at ~/.md-qa/config.yaml or config.toml with 'api.base_url' and 'api.api_key'\n"
                 "- Environment variables MARKDOWN_QA_API_BASE_URL and MARKDOWN_QA_API_KEY"
             )
 

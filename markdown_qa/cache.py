@@ -7,7 +7,7 @@ from typing import Optional
 class CacheManager:
     """Manages centralized cache directory for indexes and embeddings."""
 
-    DEFAULT_CACHE_DIR = Path.home() / ".markdown-qa" / "cache"
+    DEFAULT_CACHE_DIR = Path.home() / ".md-qa" / "cache"
 
     def __init__(self, cache_dir: Optional[Path] = None):
         """
