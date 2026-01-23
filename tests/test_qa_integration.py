@@ -31,11 +31,12 @@ class TestQAIntegration:
             api_config = MagicMock(spec=APIConfig)
             api_config.base_url = "https://api.example.com"
             api_config.api_key = "test-key"
+            api_config.llm_model = "test-model"
+            api_config.embedding_model = "text-embedding-3-small"
 
             # Mock embedding generator (to avoid actual API calls)
             with patch("markdown_qa.qa.OpenAI") as mock_openai_class, \
-                 patch("markdown_qa.embeddings.OpenAI") as mock_embeddings_openai, \
-                 patch("markdown_qa.vector_store.OpenAI") as mock_vector_openai:
+                 patch("markdown_qa.embeddings.OpenAI") as mock_embeddings_openai:
                 
                 # Mock OpenAI clients
                 mock_llm_client = MagicMock()
@@ -43,9 +44,6 @@ class TestQAIntegration:
                 
                 mock_emb_client = MagicMock()
                 mock_embeddings_openai.return_value = mock_emb_client
-                
-                mock_vector_client = MagicMock()
-                mock_vector_openai.return_value = mock_vector_client
 
                 # Mock LLM response
                 mock_response = MagicMock()
@@ -129,12 +127,14 @@ class TestQAIntegration:
         api_config = MagicMock(spec=APIConfig)
         api_config.base_url = "https://api.example.com"
         api_config.api_key = "test-key"
+        api_config.llm_model = "test-model"
 
-        answerer = QuestionAnswerer(retrieval_engine, api_config=api_config)
+        with patch("markdown_qa.qa.OpenAI"):
+            answerer = QuestionAnswerer(retrieval_engine, api_config=api_config)
 
-        # Should raise ValueError when no relevant content found
-        with pytest.raises(ValueError, match="No relevant content found"):
-            answerer.answer("What is Python?")
+            # Should raise ValueError when no relevant content found
+            with pytest.raises(ValueError, match="No relevant content found"):
+                answerer.answer("What is Python?")
 
     def test_qa_flow_with_multiple_sources(self):
         """Test Q&A flow with multiple sources."""
@@ -155,6 +155,7 @@ class TestQAIntegration:
         api_config = MagicMock(spec=APIConfig)
         api_config.base_url = "https://api.example.com"
         api_config.api_key = "test-key"
+        api_config.llm_model = "test-model"
 
         with patch("markdown_qa.qa.OpenAI") as mock_openai_class:
             mock_client = MagicMock()

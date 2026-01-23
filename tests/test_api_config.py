@@ -42,8 +42,14 @@ api_key = "test-key-from-toml"
             assert config.base_url == "https://api.example.com/v1"
             assert config.api_key == "test-key-from-toml"
 
-    def test_read_from_environment_variables(self):
+    def test_read_from_environment_variables(self, monkeypatch):
         """Test reading API config from environment variables."""
+        # Use a non-existent path to avoid loading user's default config
+        fake_config_dir = Path("/nonexistent-path-for-test")
+        monkeypatch.setattr(APIConfig, "DEFAULT_CONFIG_DIR", fake_config_dir)
+        monkeypatch.setattr(APIConfig, "DEFAULT_CONFIG_YAML", fake_config_dir / "config.yaml")
+        monkeypatch.setattr(APIConfig, "DEFAULT_CONFIG_TOML", fake_config_dir / "config.toml")
+        
         os.environ["MARKDOWN_QA_API_BASE_URL"] = "https://api.env.com/v1"
         os.environ["MARKDOWN_QA_API_KEY"] = "test-key-from-env"
         try:
@@ -75,8 +81,14 @@ api:
             del os.environ["MARKDOWN_QA_API_BASE_URL"]
             del os.environ["MARKDOWN_QA_API_KEY"]
 
-    def test_missing_config_raises_error(self):
+    def test_missing_config_raises_error(self, monkeypatch):
         """Test that missing API configuration raises an error."""
+        # Use a non-existent path to avoid loading user's default config
+        fake_config_dir = Path("/nonexistent-path-for-test")
+        monkeypatch.setattr(APIConfig, "DEFAULT_CONFIG_DIR", fake_config_dir)
+        monkeypatch.setattr(APIConfig, "DEFAULT_CONFIG_YAML", fake_config_dir / "config.yaml")
+        monkeypatch.setattr(APIConfig, "DEFAULT_CONFIG_TOML", fake_config_dir / "config.toml")
+        
         # Clear environment variables
         env_vars = ["MARKDOWN_QA_API_BASE_URL", "MARKDOWN_QA_API_KEY"]
         for var in env_vars:

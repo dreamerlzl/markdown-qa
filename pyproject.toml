@@ -36,3 +36,8 @@ dev = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+filterwarnings = [
+    # SWIG bindings from faiss-cpu don't have __module__ attribute
+    "ignore:builtin type Swig.*:DeprecationWarning",
+    "ignore:builtin type swigvarlink.*:DeprecationWarning",
+]

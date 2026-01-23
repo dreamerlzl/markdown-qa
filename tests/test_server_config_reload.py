@@ -11,6 +11,14 @@ from markdown_qa.config import APIConfig
 from markdown_qa.server_config import ServerConfig
 
 
+@pytest.fixture(autouse=True)
+def mock_logger():
+    """Mock the server logger to avoid file permission issues in tests."""
+    with patch("markdown_qa.server_config.get_server_logger") as mock:
+        mock.return_value = MagicMock()
+        yield mock
+
+
 class TestServerConfigReload:
     """Test server configuration reload functionality."""
 
@@ -78,9 +86,9 @@ class TestServerConfigReload:
                     }, f)
 
                 result = config.reload(preserve_cli_overrides=False)
-                assert "directories" in result["changed"]
+                assert "directories" in result.changed
                 assert str(new_doc_dir) in config.directories
-                assert result["requires_restart"] is False
+                assert result.requires_restart is False
 
     def test_reload_reload_interval(self):
         """Test reloading reload_interval from config file."""
@@ -130,9 +138,9 @@ class TestServerConfigReload:
                     }, f)
 
                 result = config.reload(preserve_cli_overrides=False)
-                assert "reload_interval" in result["changed"]
+                assert "reload_interval" in result.changed
                 assert config.reload_interval == 600
-                assert result["requires_restart"] is False
+                assert result.requires_restart is False
 
     def test_reload_port_requires_restart(self):
         """Test that port changes require restart."""
@@ -182,8 +190,8 @@ class TestServerConfigReload:
                     }, f)
 
                 result = config.reload(preserve_cli_overrides=False)
-                assert "port" in result["changed"]
-                assert result["requires_restart"] is True
+                assert "port" in result.changed
+                assert result.requires_restart is True
 
     def test_reload_preserves_cli_overrides(self):
         """Test that CLI overrides are preserved when reloading."""
@@ -242,7 +250,7 @@ class TestServerConfigReload:
                 # Directories should not change (CLI override preserved)
                 assert str(new_doc_dir) in config.directories
                 # But reload_interval should change (no CLI override)
-                assert "reload_interval" in result["changed"]
+                assert "reload_interval" in result.changed
 
     def test_reload_validation_failure(self):
         """Test that validation failures prevent reload."""

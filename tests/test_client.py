@@ -147,12 +147,11 @@ class TestMarkdownQAClient:
         client = MarkdownQAClient()
 
         with patch.object(client, "connect", return_value=True), \
-             patch.object(client, "get_status") as mock_status, \
-             patch.object(client, "send_query") as mock_query, \
-             patch.object(client, "display_response") as mock_display, \
+             patch.object(client, "get_status", new=AsyncMock(return_value={"status": "ready"})), \
+             patch.object(client, "send_query_stream") as mock_query_stream, \
              patch.object(client, "disconnect") as mock_disconnect:
 
-            mock_query.return_value = {
+            mock_query_stream.return_value = {
                 "type": MessageType.RESPONSE,
                 "answer": "Answer",
                 "sources": [],
@@ -161,8 +160,7 @@ class TestMarkdownQAClient:
             result = await client.run_single_query("Question?")
 
             assert result == 0
-            mock_query.assert_called_once_with("Question?", index=None)
-            mock_display.assert_called_once()
+            mock_query_stream.assert_called_once_with("Question?", index=None)
 
     @pytest.mark.asyncio
     async def test_run_single_query_connection_failure(self):
@@ -180,12 +178,11 @@ class TestMarkdownQAClient:
         client = MarkdownQAClient()
 
         with patch.object(client, "connect", return_value=True), \
-             patch.object(client, "get_status"), \
-             patch.object(client, "send_query") as mock_query, \
-             patch.object(client, "display_response") as mock_display, \
+             patch.object(client, "get_status", new=AsyncMock(return_value={"status": "ready"})), \
+             patch.object(client, "send_query_stream") as mock_query_stream, \
              patch.object(client, "disconnect"):
 
-            mock_query.return_value = {
+            mock_query_stream.return_value = {
                 "type": MessageType.ERROR,
                 "message": "Error occurred",
             }
@@ -193,4 +190,4 @@ class TestMarkdownQAClient:
             result = await client.run_single_query("Question?")
 
             assert result == 1
-            mock_display.assert_called_once()
+            mock_query_stream.assert_called_once()

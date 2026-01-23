@@ -28,6 +28,7 @@ class TestQuestionAnswerer:
         api_config = MagicMock(spec=APIConfig)
         api_config.base_url = "https://api.example.com"
         api_config.api_key = "test-key"
+        api_config.llm_model = "test-model"
 
         # Mock OpenAI client
         with patch("markdown_qa.qa.OpenAI") as mock_openai_class:
@@ -54,6 +55,7 @@ class TestQuestionAnswerer:
         api_config = MagicMock(spec=APIConfig)
         api_config.base_url = "https://api.example.com"
         api_config.api_key = "test-key"
+        api_config.llm_model = "test-model"
 
         answerer = QuestionAnswerer(retrieval_engine, api_config=api_config)
 
@@ -79,6 +81,7 @@ class TestQuestionAnswerer:
         api_config = MagicMock(spec=APIConfig)
         api_config.base_url = "https://api.example.com"
         api_config.api_key = "test-key"
+        api_config.llm_model = "test-model"
 
         with patch("markdown_qa.qa.OpenAI") as mock_openai_class:
             mock_client = MagicMock()
@@ -116,6 +119,7 @@ class TestQuestionAnswerer:
         api_config = MagicMock(spec=APIConfig)
         api_config.base_url = "https://api.example.com"
         api_config.api_key = "test-key"
+        api_config.llm_model = "test-model"
 
         with patch("markdown_qa.qa.OpenAI") as mock_openai_class:
             mock_client = MagicMock()
@@ -139,6 +143,7 @@ class TestQuestionAnswerer:
         api_config = MagicMock(spec=APIConfig)
         api_config.base_url = "https://api.example.com"
         api_config.api_key = "test-key"
+        api_config.llm_model = "test-model"
 
         answerer = QuestionAnswerer(retrieval_engine, api_config=api_config)
         prompt = answerer._build_prompt("What is Python?", "Python is a language.")

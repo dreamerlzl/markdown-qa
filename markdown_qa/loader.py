@@ -3,7 +3,7 @@
 import hashlib
 import warnings
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 
 def count_markdown_files(directory: str) -> int:
@@ -110,3 +110,81 @@ def compute_directories_checksum(directories: List[str]) -> str:
         hasher.update(f"{path}:{mtime}".encode("utf-8"))
 
     return hasher.hexdigest()
+
+
+def get_file_mtimes(directories: List[str]) -> Dict[str, float]:
+    """
+    Get modification times for all markdown files in directories.
+
+    Args:
+        directories: List of directory paths to scan.
+
+    Returns:
+        Dict mapping absolute file paths to their mtime.
+    """
+    file_mtimes: Dict[str, float] = {}
+
+    for directory_str in directories:
+        directory = Path(directory_str)
+        if not directory.exists() or not directory.is_dir():
+            continue
+
+        for md_file in directory.rglob("*.md"):
+            try:
+                file_mtimes[str(md_file)] = md_file.stat().st_mtime
+            except OSError:
+                continue
+
+    return file_mtimes
+
+
+def generate_chunk_id(file_path: str, chunk_index: int) -> int:
+    """
+    Generate a stable signed 63-bit ID for a chunk.
+
+    The ID is derived from the file path (upper 47 bits) and chunk index
+    (lower 16 bits), ensuring:
+    - Same file + index always produces the same ID
+    - Different files produce different ID prefixes
+    - Up to 65536 chunks per file
+    - Result fits in signed 64-bit integer (required by FAISS/numpy)
+
+    Args:
+        file_path: Absolute path to the source file.
+        chunk_index: Index of the chunk within the file (0-based).
+
+    Returns:
+        A stable signed 64-bit integer ID (always positive).
+    """
+    # Hash the file path and use upper 47 bits (not 48, to fit in signed int64)
+    file_hash = hashlib.sha256(file_path.encode("utf-8")).hexdigest()[:12]
+    file_prefix = int(file_hash, 16) & 0x7FFFFFFFFFFF  # Mask to 47 bits
+
+    # Combine with chunk index (lower 16 bits)
+    chunk_id = (file_prefix << 16) | (chunk_index & 0xFFFF)
+
+    return chunk_id
+
+
+def load_single_file(file_path: str) -> Tuple[Path, str]:
+    """
+    Load a single markdown file.
+
+    Args:
+        file_path: Path to the markdown file.
+
+    Returns:
+        Tuple of (Path, content).
+
+    Raises:
+        FileNotFoundError: If file doesn't exist.
+        ValueError: If file is not a markdown file.
+    """
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+    if path.suffix != ".md":
+        raise ValueError(f"Not a markdown file: {file_path}")
+
+    content = path.read_text(encoding="utf-8")
+    return path, content

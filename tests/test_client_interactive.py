@@ -39,7 +39,7 @@ class TestClientInteractive:
         client = MarkdownQAClient()
 
         with patch.object(client, "connect", return_value=True), \
-             patch.object(client, "get_status"), \
+             patch.object(client, "get_status", new=AsyncMock(return_value={"status": "ready"})), \
              patch.object(client, "disconnect"), \
              patch("builtins.input", side_effect=["exit"]):
 
@@ -54,7 +54,7 @@ class TestClientInteractive:
 
         with patch.object(client, "connect", return_value=True), \
              patch.object(client, "get_status") as mock_status, \
-             patch.object(client, "send_query") as mock_query, \
+             patch.object(client, "send_query_stream") as mock_query_stream, \
              patch.object(client, "display_response") as mock_display, \
              patch.object(client, "disconnect"), \
              patch("builtins.input", side_effect=["Question 1", "Question 2", "quit"]):
@@ -63,7 +63,7 @@ class TestClientInteractive:
                 "type": MessageType.STATUS,
                 "status": "ready",
             }
-            mock_query.return_value = {
+            mock_query_stream.return_value = {
                 "type": MessageType.RESPONSE,
                 "answer": "Answer",
                 "sources": [],
@@ -72,9 +72,9 @@ class TestClientInteractive:
             result = await client.run_interactive()
 
             assert result == 0
-            assert mock_query.call_count == 2
-            # display_response is called for status (1) + 2 queries (2) = 3 total
-            assert mock_display.call_count == 3
+            assert mock_query_stream.call_count == 2
+            # display_response is only called for status (1), not for queries (streaming handles output)
+            assert mock_display.call_count == 1
 
     @pytest.mark.asyncio
     async def test_interactive_mode_empty_question(self):
@@ -82,7 +82,7 @@ class TestClientInteractive:
         client = MarkdownQAClient()
 
         with patch.object(client, "connect", return_value=True), \
-             patch.object(client, "get_status"), \
+             patch.object(client, "get_status", new=AsyncMock(return_value={"status": "ready"})), \
              patch.object(client, "send_query") as mock_query, \
              patch.object(client, "disconnect"), \
              patch("builtins.input", side_effect=["", "quit"]):
@@ -99,7 +99,7 @@ class TestClientInteractive:
         client = MarkdownQAClient()
 
         with patch.object(client, "connect", return_value=True), \
-             patch.object(client, "get_status"), \
+             patch.object(client, "get_status", new=AsyncMock(return_value={"status": "ready"})), \
              patch.object(client, "disconnect"), \
              patch("builtins.input", side_effect=KeyboardInterrupt()):
 

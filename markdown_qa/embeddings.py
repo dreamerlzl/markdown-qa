@@ -17,7 +17,8 @@ from markdown_qa.config import APIConfig
 from markdown_qa.logger import get_server_logger
 
 # Maximum number of texts to send in a single batch API call
-DEFAULT_BATCH_SIZE = 100
+# Some APIs (e.g., Alibaba) only support batch sizes up to 10
+DEFAULT_BATCH_SIZE = 10
 
 
 class EmbeddingGenerator:

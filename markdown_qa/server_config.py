@@ -1,6 +1,7 @@
 """Server configuration module."""
 
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
@@ -14,6 +15,19 @@ try:
     import tomli  # type: ignore[import-not-found]
 except ImportError:
     tomli = None
+
+
+@dataclass
+class ConfigReloadResult:
+    """Result of a configuration reload operation."""
+
+    changed: List[str] = field(default_factory=list)
+    requires_restart: bool = False
+
+    @property
+    def has_changes(self) -> bool:
+        """Return True if any settings were changed."""
+        return bool(self.changed)
 
 
 class ServerConfig:
@@ -241,7 +255,7 @@ class ServerConfig:
             return self.DEFAULT_CONFIG_TOML
         return None
 
-    def reload(self, preserve_cli_overrides: bool = True) -> dict:
+    def reload(self, preserve_cli_overrides: bool = True) -> ConfigReloadResult:
         """
         Reload configuration from config file.
 
@@ -249,7 +263,7 @@ class ServerConfig:
             preserve_cli_overrides: If True, preserve values that were set via CLI args.
 
         Returns:
-            Dictionary with changed settings: {'changed': [...], 'requires_restart': bool}
+            ConfigReloadResult with details about what changed.
         """
         old_config = {
             "directories": self.directories.copy() if self.directories else [],
@@ -261,7 +275,7 @@ class ServerConfig:
         # Reload from config file
         config_file = self.get_config_file_path()
         if not config_file:
-            return {"changed": [], "requires_restart": False}
+            return ConfigReloadResult()
 
         config_data = self._load_config_file(config_file)
 
@@ -338,4 +352,4 @@ class ServerConfig:
                 self.port = old_config["port"]
                 raise ValueError(f"Configuration reload failed validation: {e}")
 
-        return {"changed": changed, "requires_restart": requires_restart}
+        return ConfigReloadResult(changed=changed, requires_restart=requires_restart)

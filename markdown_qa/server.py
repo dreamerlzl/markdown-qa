@@ -132,39 +132,46 @@ class MarkdownQAServer:
         """
         Reload indexes (called by scheduler).
 
+        Uses incremental updates when possible to only process changed files.
+        Falls back to full rebuild when incremental update is not possible.
+
         Args:
             force: If True, rebuild even if no changes detected.
         """
         try:
-            # Check if there are changes to the directories
-            if not force:
-                has_changes, current_checksum = self.index_manager.has_changes(
+            if force:
+                # Force full rebuild (e.g., config changed)
+                self.logger.info("Forcing full index rebuild...")
+                self.index_manager._do_full_rebuild(
                     self.config.index_name, self.config.directories
                 )
-                if not has_changes:
-                    self.logger.debug("No changes detected in directories, skipping reload")
-                    return
-            else:
-                # Compute checksum for later storage
-                from markdown_qa.loader import compute_directories_checksum
-                current_checksum = compute_directories_checksum(self.config.directories)
+                self.logger.info("Full index rebuild completed successfully")
+                return
 
-            self.logger.info("Changes detected, rebuilding index...")
-
-            # Build new index in background
-            new_index = self.index_manager.rebuild_index(
+            # Try incremental update
+            result = self.index_manager.incremental_update(
                 self.config.index_name, self.config.directories
             )
 
-            # Atomically swap to new index
-            self.index_manager.swap_index(new_index)
+            # Check if we fell back to full rebuild
+            if result.fallback_to_full_rebuild:
+                self.logger.info(
+                    f"Performed full rebuild (reason: {result.reason})"
+                )
+                return
 
-            # Update the stored checksum
-            self.index_manager.update_checksum(
-                self.config.index_name, self.config.directories, current_checksum
+            # Log incremental update results
+            if not result.has_changes:
+                self.logger.debug("No changes detected, skipping reload")
+                return
+
+            self.logger.info(
+                f"Incremental update completed: "
+                f"{len(result.added_files)} added, "
+                f"{len(result.modified_files)} modified, "
+                f"{len(result.deleted_files)} deleted"
             )
 
-            self.logger.info("Index reload completed successfully")
         except Exception as e:
             # Log error but don't crash
             self.logger.error(f"Error reloading indexes: {e}", exc_info=True)
@@ -174,25 +181,25 @@ class MarkdownQAServer:
         try:
             result = self.config.reload(preserve_cli_overrides=True)
 
-            if not result["changed"]:
+            if not result.has_changes:
                 return
 
             self.logger.info(
-                f"Configuration reloaded. Changed settings: {', '.join(result['changed'])}"
+                f"Configuration reloaded. Changed settings: {', '.join(result.changed)}"
             )
 
-            if result["requires_restart"]:
+            if result.requires_restart:
                 self.logger.warning(
                     "Port change detected. Server restart required for port change to take effect."
                 )
                 return
 
             # Handle hot-reloadable changes
-            if "directories" in result["changed"] or "index_name" in result["changed"]:
+            if "directories" in result.changed or "index_name" in result.changed:
                 self.logger.info("Reloading indexes due to configuration change...")
                 self._reload_indexes(force=True)
 
-            if "reload_interval" in result["changed"]:
+            if "reload_interval" in result.changed:
                 # Restart reload scheduler with new interval
                 if self.reload_scheduler:
                     self.reload_scheduler.stop()
@@ -204,7 +211,7 @@ class MarkdownQAServer:
                     f"Reload scheduler updated (new interval: {self.config.reload_interval}s)"
                 )
 
-            if "api_config" in result["changed"]:
+            if "api_config" in result.changed:
                 # Recreate index manager and query handler with new API config
                 self.logger.info("Updating API configuration...")
                 self.index_manager = IndexManager(api_config=self.config.api_config)
