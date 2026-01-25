@@ -1,9 +1,16 @@
 """Markdown file loader module for loading markdown files from directories."""
 
 import hashlib
+import time
 import warnings
 from pathlib import Path
 from typing import Dict, List, Tuple
+
+
+class FileBeingEditedError(Exception):
+    """Raised when a file appears to be actively being edited."""
+
+    pass
 
 
 def count_markdown_files(directory: str) -> int:
@@ -20,6 +27,35 @@ def count_markdown_files(directory: str) -> int:
     if not dir_path.exists() or not dir_path.is_dir():
         return 0
     return len(list(dir_path.rglob("*.md")))
+
+
+def is_file_stable(file_path: Path, stability_window: float = 2.0) -> bool:
+    """
+    Check if a file is stable (not being actively edited).
+
+    A file is considered stable if its modification time is older than the
+    stability window.
+
+    Args:
+        file_path: Path to the file to check.
+        stability_window: Minimum seconds since last modification for file to be considered stable.
+
+    Returns:
+        True if file appears stable, False if it's likely being edited.
+    """
+    try:
+        # Get initial mtime
+        initial_mtime = file_path.stat().st_mtime
+        current_time = time.time()
+
+        # Check if file was modified very recently
+        if (current_time - initial_mtime) < stability_window:
+            return False
+
+        return True
+    except (OSError, IOError):
+        # If we can't read/stat the file, assume it's not stable
+        return False
 
 
 def load_markdown_files(directories: List[str]) -> List[Tuple[Path, str]]:
@@ -57,8 +93,20 @@ def load_markdown_files(directories: List[str]) -> List[Tuple[Path, str]]:
         # Load content from each markdown file
         for md_file in md_files:
             try:
+                # Skip files that appear to be actively being edited
+                if not is_file_stable(md_file):
+                    warnings.warn(
+                        f"Skipping {md_file}: file appears to be actively being edited"
+                    )
+                    continue
+
                 content = md_file.read_text(encoding="utf-8")
                 markdown_files.append((md_file, content))
+            except FileBeingEditedError:
+                warnings.warn(
+                    f"Skipping {md_file}: file appears to be actively being edited"
+                )
+                continue
             except Exception as e:
                 warnings.warn(f"Failed to read file {md_file}: {e}")
                 continue
@@ -166,12 +214,13 @@ def generate_chunk_id(file_path: str, chunk_index: int) -> int:
     return chunk_id
 
 
-def load_single_file(file_path: str) -> Tuple[Path, str]:
+def load_single_file(file_path: str, check_stability: bool = True) -> Tuple[Path, str]:
     """
     Load a single markdown file.
 
     Args:
         file_path: Path to the markdown file.
+        check_stability: If True, check if file is stable before reading.
 
     Returns:
         Tuple of (Path, content).
@@ -179,12 +228,19 @@ def load_single_file(file_path: str) -> Tuple[Path, str]:
     Raises:
         FileNotFoundError: If file doesn't exist.
         ValueError: If file is not a markdown file.
+        FileBeingEditedError: If file appears to be actively being edited.
     """
     path = Path(file_path)
     if not path.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
     if path.suffix != ".md":
         raise ValueError(f"Not a markdown file: {file_path}")
+
+    # Check if file is stable (not being actively edited)
+    if check_stability and not is_file_stable(path):
+        raise FileBeingEditedError(
+            f"File {file_path} appears to be actively being edited"
+        )
 
     content = path.read_text(encoding="utf-8")
     return path, content

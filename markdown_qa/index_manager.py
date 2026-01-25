@@ -9,11 +9,13 @@ from markdown_qa.cache import CacheManager
 from markdown_qa.config import APIConfig
 from markdown_qa.index_validator import IndexValidator
 from markdown_qa.loader import (
+    FileBeingEditedError,
     compute_directories_checksum,
     generate_chunk_id,
     get_file_mtimes,
     load_single_file,
 )
+from markdown_qa.logger import get_server_logger
 from markdown_qa.manifest import Manifest
 from markdown_qa.vector_store import VectorStore
 
@@ -61,6 +63,9 @@ class IndexManager:
 
         # Manifest for tracking checksums
         self.manifest = Manifest(self.cache_manager.get_manifest_path())
+
+        # Logger
+        self.logger = get_server_logger()
 
     def load_index(self, index_name: str, directories: list[str]) -> None:
         """
@@ -247,20 +252,26 @@ class IndexManager:
         from markdown_qa.chunker import MarkdownChunker
         chunker = MarkdownChunker()
 
-        # 1. Remove chunks for deleted and modified files
+        # 1. Remove chunks for deleted files (always safe to remove)
         chunks_to_remove: List[int] = []
-        for file_path in result.deleted_files + result.modified_files:
+        for file_path in result.deleted_files:
             chunk_ids = self.manifest.get_chunk_ids_for_file(index_name, file_path)
             chunks_to_remove.extend(chunk_ids)
             self.manifest.remove_file_metadata(index_name, file_path)
 
-        if chunks_to_remove:
-            current_index.remove_chunks(chunks_to_remove)
+        # 2. Track old chunk IDs for modified files before processing
+        # We'll only remove them after successfully loading new content
+        modified_file_old_chunks: Dict[str, List[int]] = {}
+        for file_path in result.modified_files:
+            old_chunk_ids = self.manifest.get_chunk_ids_for_file(index_name, file_path)
+            if old_chunk_ids:
+                modified_file_old_chunks[file_path] = old_chunk_ids
 
-        # 2. Add chunks for added and modified files
+        # 3. Process added and modified files
         new_chunks: List[Dict[str, Any]] = []
         new_chunk_ids: List[int] = []
         file_mtimes = get_file_mtimes(directories)
+        successfully_processed_modified: List[str] = []
 
         for file_path in result.added_files + result.modified_files:
             try:
@@ -279,9 +290,31 @@ class IndexManager:
                     "mtime": file_mtimes.get(file_path, 0),
                     "chunk_ids": file_chunk_ids,
                 })
-            except Exception:
-                # Skip files that can't be processed
+
+                # Track successfully processed modified files for chunk removal
+                if file_path in result.modified_files:
+                    successfully_processed_modified.append(file_path)
+            except FileBeingEditedError:
+                # Skip files that are actively being edited
+                # For modified files, keep old chunks in place (don't remove them)
+                self.logger.debug(
+                    f"Skipping {file_path}: file appears to be actively being edited"
+                )
                 continue
+            except Exception as e:
+                # Skip files that can't be processed for other reasons
+                # For modified files, keep old chunks in place (don't remove them)
+                self.logger.warning(f"Failed to process file {file_path}: {e}")
+                continue
+
+        # 4. Remove old chunks for successfully processed modified files
+        for file_path in successfully_processed_modified:
+            if file_path in modified_file_old_chunks:
+                chunks_to_remove.extend(modified_file_old_chunks[file_path])
+
+        # 5. Remove all chunks that need to be removed (deleted files + successfully updated modified files)
+        if chunks_to_remove:
+            current_index.remove_chunks(chunks_to_remove)
 
         if new_chunks:
             current_index.add_chunks_with_ids(new_chunks, new_chunk_ids)
