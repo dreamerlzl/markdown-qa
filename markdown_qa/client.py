@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import signal
 import sys
 from typing import Any, AsyncContextManager, Dict, Optional
 
@@ -338,9 +339,22 @@ class MarkdownQAClient:
                 self.logger.error("Error checking server status", exc_info=True)
                 pass
 
-            # Send query with streaming
+            # Send query with streaming (run in task so Ctrl+C can cancel immediately)
+            loop = asyncio.get_running_loop()
+            stream_task = asyncio.create_task(
+                self.send_query_stream(question, index=index)
+            )
             try:
-                response = await self.send_query_stream(question, index=index)
+                if hasattr(loop, "add_signal_handler"):
+                    loop.add_signal_handler(signal.SIGINT, stream_task.cancel)
+                try:
+                    response = await stream_task
+                finally:
+                    if hasattr(loop, "add_signal_handler"):
+                        loop.remove_signal_handler(signal.SIGINT)
+            except asyncio.CancelledError:
+                print("\nInterrupted.", file=sys.stderr)
+                return 130
             except Exception as e:
                 self.logger.error(f"Error sending query: {e}", exc_info=True)
                 print(f"Error sending query: {str(e)}", file=sys.stderr)
@@ -361,12 +375,18 @@ class MarkdownQAClient:
 
             return 0
 
+        except KeyboardInterrupt:
+            print("\nInterrupted.", file=sys.stderr)
+            return 130
         except Exception as e:
             self.logger.error(f"Error: {e}", exc_info=True)
             print(f"Error: {str(e)}", file=sys.stderr)
             return 1
         finally:
-            await self.disconnect()
+            try:
+                await asyncio.wait_for(self.disconnect(), timeout=0.5)
+            except asyncio.TimeoutError:
+                pass  # Exit anyway; OS will close the socket
 
     async def run_interactive(self) -> int:
         """
@@ -493,4 +513,8 @@ Examples:
 
 
 if __name__ == "__main__":
-    sys.exit(asyncio.run(main()))
+    try:
+        sys.exit(asyncio.run(main()))
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
+        sys.exit(130)
