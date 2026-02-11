@@ -1,6 +1,6 @@
 # markdown-qa
 
-Q&A over local Markdown: index directories with embeddings (FAISS + OpenAI-compatible API), run a WebSocket server, and ask questions from the CLI.
+Q&A over local Markdown: index directories with embeddings (FAISS + OpenAI-compatible API), run a WebSocket server, and ask questions from the CLI or a desktop GUI.
 
 - **Table of contents**
   - [Feature highlights](#feature-highlights)
@@ -14,13 +14,17 @@ Q&A over local Markdown: index directories with embeddings (FAISS + OpenAI-compa
 
 - **Incremental updates** — Only re-index changed files (by mtime); full rebuild when needed.
 - **WebSocket server** — Long-running process; optional scheduled reload; config file watched for API/server changes.
-- **CLI client** — Single-question mode or interactive session; optional `--index` and `--server`.
+- **Desktop GUI** (Tauri) — Config editor + chat panel; connects to the same WebSocket server.
+- **Rust TUI client** (`md-qa`) — Single-question mode; reads `~/.md-qa/config.yaml`; same WebSocket protocol as the server.
+- **Python CLI client** *(deprecated)* — Single-question mode or interactive session; being replaced by the Rust TUI.
 
 ## Requirements
 
 - **Python 3.13+**
 - **uv** (recommended) or pip
 - **API**: OpenAI-compatible embedding + chat API (base URL + API key)
+- **Rust stable** (for the TUI binary and GUI app; install via [rustup](https://rustup.rs))
+- **System libs for Tauri** (Linux: `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, etc. — see [Tauri prerequisites](https://tauri.app/start/prerequisites/))
 
 ## Quick setup
 
@@ -49,10 +53,14 @@ Then start the server and client:
 # Terminal 1: index and serve (e.g. this repo’s docs)
 uv run python -m markdown_qa.server --directories /path/to/your/md/docs
 
-# Terminal 2: ask questions
-uv run python -m markdown_qa.client "Your question here"
-# Or interactive:
-uv run python -m markdown_qa.client
+# Terminal 2: ask questions (Rust TUI — recommended)
+echo "Your question here" | md-qa --config ~/.md-qa/config.yaml
+# Or via env var:
+#   export MD_QA_CONFIG=~/.md-qa/config.yaml
+#   echo "Your question" | md-qa
+
+# (deprecated) Python client:
+# uv run python -m markdown_qa.client "Your question here"
 ```
 
 ## Configuration
@@ -95,7 +103,36 @@ uv run python -m markdown_qa.server [OPTIONS]
 # --index-name NAME
 ```
 
-**Client**
+**GUI (Tauri desktop app)**
+
+```bash
+# Build and run the desktop app
+cargo build --release -p md_qa_gui
+./target/release/md_qa_gui
+# Or during development:
+cargo run -p md_qa_gui
+```
+
+- Opens a window with a **Settings** tab (config editor) and a **Chat** tab.
+- Connects to the WebSocket server on startup using the port from config.
+- The server must be started separately (`python -m markdown_qa.server`). The GUI does not start or manage the server.
+- Config is read from and written to `~/.md-qa/config.yaml`.
+
+**Client (Rust TUI — recommended)**
+
+```bash
+# Build once
+cargo build --release -p md_qa_client --bin md-qa
+
+# Single question (pipe or redirect)
+echo "What is Python?" | md-qa --config ~/.md-qa/config.yaml
+# Or use env var MD_QA_CONFIG instead of --config
+```
+
+- Reads server port and index from `~/.md-qa/config.yaml`.
+- Connects to `ws://127.0.0.1:{port}`, sends the question, prints streamed answer and sources.
+
+**Client (Python — deprecated)**
 
 ```bash
 uv run python -m markdown_qa.client [QUESTION] [OPTIONS]
@@ -105,9 +142,11 @@ uv run python -m markdown_qa.client [QUESTION] [OPTIONS]
 
 - Omit `QUESTION` for interactive mode.
 - Default server URL: `ws://localhost:8765`.
+- **Deprecated**: use the Rust `md-qa` binary instead.
 
 ## Development
 
-- **Tests:** `uv run pytest`
-- **Dependencies:** managed with **uv** only (`uv add`, `uv remove`, `uv sync`). See `.cursor/rules/uv.md`.
+- **Python tests:** `uv run pytest`
+- **Rust tests:** `cargo test` (runs `md_qa_client` and `md_qa_gui` test suites)
+- **Dependencies:** Python managed with **uv** only (`uv add`, `uv remove`, `uv sync`). See `.cursor/rules/uv.md`. Rust managed via `Cargo.toml`.
 - **Specs:** `openspec/` and `AGENTS.md` describe the Markdown Q&A behaviour and OpenSpec workflow.

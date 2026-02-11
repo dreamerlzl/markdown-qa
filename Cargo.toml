@@ -1,0 +1,6 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/md_qa_client",
+    "crates/md_qa_gui/src-tauri",
+]

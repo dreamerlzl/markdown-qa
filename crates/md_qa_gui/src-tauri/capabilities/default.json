@@ -1,0 +1,8 @@
+{
+  "identifier": "main-capability",
+  "description": "Main window capability",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

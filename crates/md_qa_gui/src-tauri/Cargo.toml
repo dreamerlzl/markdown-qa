@@ -1,0 +1,30 @@
+[package]
+name = "md_qa_gui"
+version = "0.1.0"
+edition = "2021"
+description = "Markdown Q&A desktop GUI (Tauri)"
+
+[[bin]]
+name = "md_qa_gui"
+path = "src/main.rs"
+
+[lib]
+name = "md_qa_gui_lib"
+path = "src/lib.rs"
+
+[dependencies]
+md_qa_client = { path = "../../md_qa_client" }
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+tempfile = "3"
+predicates = "3"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.21", features = ["native-tls"] }
+futures-util = "0.3"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

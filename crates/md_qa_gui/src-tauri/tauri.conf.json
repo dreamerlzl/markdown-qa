@@ -1,0 +1,26 @@
+{
+  "productName": "Markdown Q&A",
+  "version": "0.1.0",
+  "identifier": "app.markdown-qa.gui",
+  "build": {
+    "frontendDist": "..",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "python3 -m http.server 1420 -d .."
+  },
+  "app": {
+    "security": {
+      "csp": "default-src 'self' 'unsafe-inline' 'unsafe-eval' http: https: tauri:; img-src 'self' data: http: https: tauri:"
+    },
+    "windows": [
+      {
+        "label": "main",
+        "title": "Markdown Q&A",
+        "width": 900,
+        "height": 700,
+        "resizable": true
+      }
+    ]
+  },
+  "bundle": {},
+  "plugins": {}
+}

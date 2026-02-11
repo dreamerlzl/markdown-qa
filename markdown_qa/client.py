@@ -1,9 +1,21 @@
-"""CLI client module for connecting to WebSocket server."""
+"""CLI client module for connecting to WebSocket server.
+
+.. deprecated::
+    This Python client is deprecated. Use the Rust TUI binary ``md-qa`` instead::
+
+        md-qa --config ~/.md-qa/config.yaml "Your question"
+        # or pipe from stdin:
+        echo "Your question" | md-qa --config ~/.md-qa/config.yaml
+
+    Build the Rust TUI with ``cargo build --release -p md_qa_client --bin md-qa``.
+    The binary reads the same ``~/.md-qa/config.yaml`` config as the server.
+"""
 
 import asyncio
 import json
 import signal
 import sys
+import warnings
 from typing import Any, AsyncContextManager, Dict, Optional
 
 import websockets
@@ -24,7 +36,11 @@ from markdown_qa.messages import (
 
 
 class MarkdownQAClient:
-    """CLI client for markdown Q&A server."""
+    """CLI client for markdown Q&A server.
+
+    .. deprecated::
+        Use the Rust ``md-qa`` TUI binary instead.
+    """
 
     def __init__(self, server_url: str = "ws://localhost:8765"):
         """
@@ -33,6 +49,12 @@ class MarkdownQAClient:
         Args:
             server_url: WebSocket server URL (default: ws://localhost:8765).
         """
+        warnings.warn(
+            "MarkdownQAClient is deprecated. Use the Rust 'md-qa' TUI binary instead. "
+            "Build: cargo build --release -p md_qa_client --bin md-qa",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.server_url = server_url
         self.websocket: Optional[ClientConnection] = None
         self._connection: Optional[AsyncContextManager[ClientConnection]] = None
