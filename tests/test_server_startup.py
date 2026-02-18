@@ -60,8 +60,8 @@ async def test_start_succeeds_with_no_directories():
 
 
 @pytest.mark.asyncio
-async def test_start_succeeds_when_index_loading_fails():
-    """Server should still start serving when initial index loading fails."""
+async def test_start_fails_when_index_loading_fails():
+    """Server should fail hard when initial index loading fails."""
     with tempfile.TemporaryDirectory() as tmpdir:
         docs_dir = Path(tmpdir) / "docs"
         docs_dir.mkdir()
@@ -80,9 +80,7 @@ async def test_start_succeeds_when_index_loading_fails():
              patch("markdown_qa.server.websockets.serve", AsyncMock(return_value=mock_ws_server)) as mock_serve, \
              patch.object(server.index_manager, "load_index", side_effect=RuntimeError("index failed")), \
              patch.object(server.index_manager, "is_ready", return_value=False):
-            start_task = asyncio.create_task(server.start())
-            await asyncio.sleep(0.01)
-            server._shutdown_event.set()
-            await start_task
+            with pytest.raises(RuntimeError, match="Failed to load indexes"):
+                await server.start()
 
-        mock_serve.assert_awaited_once()
+        mock_serve.assert_not_awaited()

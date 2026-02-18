@@ -334,15 +334,13 @@ class MarkdownQAServer:
             except Exception as e:
                 self.logger.error(f"Error loading indexes: {e}", exc_info=True)
                 self.index_manager.clear_index()
+                raise RuntimeError(f"Failed to load indexes: {e}") from e
 
-            if self.index_manager.is_ready():
-                self.logger.info("Indexes loaded successfully")
-            else:
+            if not self.index_manager.is_ready():
                 self.index_manager.clear_index()
-                self.logger.warning(
-                    "Starting server without a ready index. "
-                    "Queries will be unavailable until indexing succeeds."
-                )
+                raise RuntimeError("Failed to load indexes at startup")
+
+            self.logger.info("Indexes loaded successfully")
         else:
             self.index_manager.clear_index()
             self.logger.warning(
