@@ -90,24 +90,41 @@ class TestServerConfig:
                 del os.environ["MARKDOWN_QA_DIRECTORIES"]
 
     def test_validation_missing_directories(self):
-        """Test validation fails when no directories provided."""
+        """Test validation allows empty directories list."""
         api_config = type("MockAPIConfig", (), {
             "base_url": "https://api.example.com",
             "api_key": "test-key",
         })()
 
-        with pytest.raises(ValueError, match="No directories specified"):
-            ServerConfig(directories=[], api_config=api_config)
+        config = ServerConfig(directories=[], api_config=api_config)
+        assert config.directories == []
 
     def test_validation_invalid_directory(self):
-        """Test validation fails when directory doesn't exist."""
+        """Test validation skips directories that don't exist."""
         api_config = type("MockAPIConfig", (), {
             "base_url": "https://api.example.com",
             "api_key": "test-key",
         })()
 
-        with pytest.raises(ValueError, match="Directory does not exist"):
-            ServerConfig(directories=["/nonexistent/path"], api_config=api_config)
+        config = ServerConfig(directories=["/nonexistent/path"], api_config=api_config)
+        assert config.directories == []
+
+    def test_validation_mixed_valid_and_invalid_directories(self):
+        """Test validation keeps valid directories and skips invalid ones."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            valid_dir = Path(tmpdir) / "docs"
+            valid_dir.mkdir()
+
+            api_config = type("MockAPIConfig", (), {
+                "base_url": "https://api.example.com",
+                "api_key": "test-key",
+            })()
+
+            config = ServerConfig(
+                directories=[str(valid_dir), "/nonexistent/path"],
+                api_config=api_config,
+            )
+            assert config.directories == [str(valid_dir)]
 
     def test_validation_invalid_port(self):
         """Test validation fails for invalid port."""

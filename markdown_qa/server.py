@@ -133,7 +133,10 @@ class MarkdownQAServer:
                 msg = "Server reloading indexes"
             else:
                 status = "not_ready"
-                msg = "Server loading indexes"
+                if self.config.directories:
+                    msg = "Server loading indexes"
+                else:
+                    msg = "Server started without valid directories configured"
 
             await websocket.send(json.dumps(create_status_message(status, msg)))  # type: ignore[attr-defined]
             request_ms = (time.perf_counter() - request_start) * 1000
@@ -161,6 +164,18 @@ class MarkdownQAServer:
             force: If True, rebuild even if no changes detected.
         """
         try:
+            if not self.config.directories:
+                if self.index_manager.is_ready():
+                    self.logger.info(
+                        "No directories configured. Clearing the current in-memory index."
+                    )
+                else:
+                    self.logger.debug(
+                        "No directories configured. Skipping index reload."
+                    )
+                self.index_manager.clear_index()
+                return
+
             if force:
                 # Force full rebuild (e.g., config changed)
                 self.logger.info("Forcing full index rebuild...")
@@ -309,20 +324,31 @@ class MarkdownQAServer:
 
     async def start(self) -> None:
         """Start the server."""
-        # Load indexes at startup
-        self.logger.info(f"Loading indexes for directories: {self.config.directories}")
-        try:
-            self.index_manager.load_index(
-                self.config.index_name, self.config.directories
+        if self.config.directories:
+            # Load indexes at startup
+            self.logger.info(f"Loading indexes for directories: {self.config.directories}")
+            try:
+                self.index_manager.load_index(
+                    self.config.index_name, self.config.directories
+                )
+            except Exception as e:
+                self.logger.error(f"Error loading indexes: {e}", exc_info=True)
+                self.index_manager.clear_index()
+
+            if self.index_manager.is_ready():
+                self.logger.info("Indexes loaded successfully")
+            else:
+                self.index_manager.clear_index()
+                self.logger.warning(
+                    "Starting server without a ready index. "
+                    "Queries will be unavailable until indexing succeeds."
+                )
+        else:
+            self.index_manager.clear_index()
+            self.logger.warning(
+                "No valid directories configured. "
+                "Starting server without indexed content."
             )
-        except Exception as e:
-            self.logger.error(f"Error loading indexes: {e}", exc_info=True)
-            raise RuntimeError(f"Failed to load indexes: {e}") from e
-
-        if not self.index_manager.is_ready():
-            raise RuntimeError("Failed to load indexes at startup")
-
-        self.logger.info("Indexes loaded successfully")
 
         # Start reload scheduler
         self.reload_scheduler = ReloadScheduler(

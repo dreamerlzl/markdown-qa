@@ -125,6 +125,11 @@ class IndexManager:
         with self._index_lock:
             self._index = new_index
 
+    def clear_index(self) -> None:
+        """Clear the current in-memory index (thread-safe)."""
+        with self._index_lock:
+            self._index = None
+
     def rebuild_index(
         self, index_name: str, directories: list[str]
     ) -> VectorStore:
