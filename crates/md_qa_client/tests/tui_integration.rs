@@ -125,6 +125,26 @@ fn tui_with_config_env_var() {
 }
 
 #[test]
+fn tui_with_positional_question_argument() {
+    let port = free_port();
+    let dir = tempfile::tempdir().unwrap();
+    let config_path = write_config(&dir, port);
+
+    let _server = spawn_test_server(port);
+    std::thread::sleep(std::time::Duration::from_millis(100));
+
+    // Provide question as a positional argument (no stdin piping).
+    let mut cmd = Command::from(cargo_bin_cmd!("md-qa"));
+    cmd.arg("--config")
+        .arg(&config_path)
+        .arg("What is the answer?");
+
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("Test answer."));
+}
+
+#[test]
 fn tui_server_down_shows_error() {
     // Point the config at a port where nothing is listening.
     let port = free_port();

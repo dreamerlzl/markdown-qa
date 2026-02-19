@@ -4,13 +4,14 @@
 
 use md_qa_client::config;
 use md_qa_client::StreamEvent;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::PathBuf;
 use std::process;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CliOptions {
     config_path: Option<PathBuf>,
+    question: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,7 +26,7 @@ fn help_text(program_name: &str) -> String {
         "md-qa: Rust TUI client for Markdown Q&A
 
 Usage:
-  {program_name} [OPTIONS]
+  {program_name} [OPTIONS] [QUESTION]
 
 Options:
   -c, --config <PATH>  Path to config file (default: MD_QA_CONFIG or ~/.md-qa/config.yaml)
@@ -33,7 +34,8 @@ Options:
   -V, --version        Print version and exit
 
 Input:
-  Reads one question from stdin (first line), then streams the answer.
+  QUESTION: optional positional question to send.
+  If QUESTION is omitted, reads one question from stdin (first line).
 "
     )
 }
@@ -46,6 +48,7 @@ where
     let mut args = args.into_iter().map(Into::into);
     let program_name = args.next().unwrap_or_else(|| "md-qa".to_string());
     let mut config_path: Option<PathBuf> = None;
+    let mut question: Option<String> = None;
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -77,15 +80,22 @@ where
                 ));
             }
             _ => {
-                return Err(format!(
-                    "Error: unexpected positional argument: {arg}\n\n{}",
-                    help_text(&program_name)
-                ));
+                if question.is_none() {
+                    question = Some(arg);
+                } else {
+                    return Err(format!(
+                        "Error: unexpected positional argument: {arg}\n\n{}",
+                        help_text(&program_name)
+                    ));
+                }
             }
         }
     }
 
-    Ok(CliCommand::Run(CliOptions { config_path }))
+    Ok(CliCommand::Run(CliOptions {
+        config_path,
+        question,
+    }))
 }
 
 fn parse_cli_command() -> Result<CliCommand, String> {
@@ -146,16 +156,10 @@ fn run(cli_options: CliOptions) {
     let server_url = format!("ws://127.0.0.1:{}", port);
     let index = cfg.server.index_name.as_deref();
 
-    // Read question from stdin (first non-empty line).
-    let stdin = io::stdin();
-    let question = {
-        let mut line = String::new();
-        stdin.lock().read_line(&mut line).unwrap_or(0);
-        line.trim().to_string()
-    };
+    let question = read_question(cli_options.question);
 
     if question.is_empty() {
-        eprintln!("Error: no question provided on stdin");
+        eprintln!("Error: no question provided (pass QUESTION argument or stdin)");
         process::exit(1);
     }
 
@@ -212,6 +216,24 @@ fn run(cli_options: CliOptions) {
             }
         }
     });
+}
+
+fn read_question(positional_question: Option<String>) -> String {
+    if let Some(question) = positional_question {
+        return question.trim().to_string();
+    }
+
+    // Read question from stdin (first line). Prompt when attached to a terminal
+    // so users invoking bare `md-qa` understand why input is awaited.
+    let stdin = io::stdin();
+    if stdin.is_terminal() {
+        print!("Question: ");
+        let _ = io::stdout().flush();
+    }
+
+    let mut line = String::new();
+    stdin.lock().read_line(&mut line).unwrap_or(0);
+    line.trim().to_string()
 }
 
 #[cfg(test)]
@@ -271,5 +293,37 @@ mod tests {
     fn unknown_option_returns_error() {
         let err = parse_cli_command_from(["md-qa", "--wat"]).expect_err("parse should fail");
         assert!(err.contains("unknown option"));
+    }
+
+    #[test]
+    fn positional_question_is_accepted() {
+        let parsed = parse_cli_command_from(["md-qa", "What is Rust?"])
+            .expect("parse should succeed");
+        match parsed {
+            CliCommand::Run(options) => {
+                assert_eq!(options.question.as_deref(), Some("What is Rust?"));
+                assert_eq!(options.config_path, None);
+            }
+            other => panic!("expected Run command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn positional_question_with_config_is_accepted() {
+        let parsed = parse_cli_command_from(["md-qa", "--config", "/tmp/config.yaml", "hello"])
+            .expect("parse should succeed");
+        match parsed {
+            CliCommand::Run(options) => {
+                assert_eq!(options.question.as_deref(), Some("hello"));
+                assert_eq!(options.config_path, Some(PathBuf::from("/tmp/config.yaml")));
+            }
+            other => panic!("expected Run command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn multiple_positional_arguments_return_error() {
+        let err = parse_cli_command_from(["md-qa", "first", "second"]).expect_err("parse should fail");
+        assert!(err.contains("unexpected positional argument"));
     }
 }
