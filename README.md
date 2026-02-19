@@ -128,12 +128,15 @@ cargo run -p md_qa_gui
 cargo build --release -p md_qa_client --bin md-qa
 
 # Single question (positional arg, pipe, or redirect)
+md-qa "What is Python?"
 md-qa --config ~/.md-qa/config.yaml "What is Python?"
 echo "What is Python?" | md-qa --config ~/.md-qa/config.yaml
 # Or use env var MD_QA_CONFIG instead of --config
 ```
 
-- Reads server port and index from `~/.md-qa/config.yaml`.
+- `--config` is optional.
+- Config lookup order: `--config` → `MD_QA_CONFIG` → `~/.md-qa/config.yaml` (if present) → built-in defaults.
+- With built-in defaults, client connects to `ws://127.0.0.1:8765` and omits index.
 - Connects to `ws://127.0.0.1:{port}`, sends the question, prints streamed answer and sources.
 
 **Client (Python — deprecated)**

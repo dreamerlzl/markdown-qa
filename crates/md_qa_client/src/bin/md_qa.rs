@@ -1,6 +1,6 @@
 //! md-qa: Rust TUI binary for Markdown Q&A.
-//! Reads config, connects to WebSocket server, sends query from stdin, prints
-//! streamed answer and sources to stdout.
+//! Loads config when available, connects to WebSocket server, sends a query
+//! from a positional argument or stdin, and prints streamed answer/sources.
 
 use md_qa_client::config;
 use md_qa_client::StreamEvent;
@@ -29,9 +29,15 @@ Usage:
   {program_name} [OPTIONS] [QUESTION]
 
 Options:
-  -c, --config <PATH>  Path to config file (default: MD_QA_CONFIG or ~/.md-qa/config.yaml)
+  -c, --config <PATH>  Optional config file path
   -h, --help           Print help and exit
   -V, --version        Print version and exit
+
+Config:
+  --config PATH (if set) takes highest priority.
+  Otherwise MD_QA_CONFIG is used when set.
+  Otherwise ~/.md-qa/config.yaml is used when it exists.
+  If no config file is available, built-in defaults are used (port 8765).
 
 Input:
   QUESTION: optional positional question to send.
@@ -102,21 +108,50 @@ fn parse_cli_command() -> Result<CliCommand, String> {
     parse_cli_command_from(std::env::args())
 }
 
-fn resolve_config_path(override_path: Option<PathBuf>) -> PathBuf {
-    // 1. --config <path> flag
-    if let Some(path) = override_path {
-        return path;
+fn load_runtime_config(cli_override_path: Option<PathBuf>) -> Result<config::Config, String> {
+    let env_path = std::env::var("MD_QA_CONFIG").ok().map(PathBuf::from);
+    let default_path = config::default_config_path();
+    load_runtime_config_from_paths(cli_override_path, env_path, default_path)
+}
+
+fn load_runtime_config_from_paths(
+    cli_override_path: Option<PathBuf>,
+    env_path: Option<PathBuf>,
+    default_path: Option<PathBuf>,
+) -> Result<config::Config, String> {
+    if let Some(path) = cli_override_path {
+        return config::load(&path).map_err(|e| {
+            format!(
+                "Error: failed to load config from {}: {}",
+                path.display(),
+                e
+            )
+        });
     }
 
-    // 2. MD_QA_CONFIG env var
-    if let Ok(val) = std::env::var("MD_QA_CONFIG") {
-        return PathBuf::from(val);
+    if let Some(path) = env_path {
+        return config::load(&path).map_err(|e| {
+            format!(
+                "Error: failed to load config from {}: {}",
+                path.display(),
+                e
+            )
+        });
     }
-    // 3. Default path (~/.md-qa/config.yaml)
-    config::default_config_path().unwrap_or_else(|| {
-        eprintln!("Error: unable to determine config path (set --config or MD_QA_CONFIG)");
-        process::exit(1);
-    })
+
+    if let Some(path) = default_path {
+        if path.exists() {
+            return config::load(&path).map_err(|e| {
+                format!(
+                    "Error: failed to load config from {}: {}",
+                    path.display(),
+                    e
+                )
+            });
+        }
+    }
+
+    Ok(config::Config::default())
 }
 
 fn main() {
@@ -138,16 +173,10 @@ fn main() {
 }
 
 fn run(cli_options: CliOptions) {
-    let config_path = resolve_config_path(cli_options.config_path);
-
-    let cfg = match config::load(&config_path) {
+    let cfg = match load_runtime_config(cli_options.config_path) {
         Ok(c) => c,
-        Err(e) => {
-            eprintln!(
-                "Error: failed to load config from {}: {}",
-                config_path.display(),
-                e
-            );
+        Err(message) => {
+            eprintln!("{message}");
             process::exit(1);
         }
     };
@@ -238,8 +267,20 @@ fn read_question(positional_question: Option<String>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_cli_command_from, CliCommand};
+    use super::{load_runtime_config_from_paths, parse_cli_command_from, CliCommand};
+    use std::fs;
     use std::path::PathBuf;
+
+    fn write_test_config(path: &std::path::Path, port: u16, index_name: &str) {
+        fs::write(
+            path,
+            format!(
+                "api:\n  base_url: http://localhost\nserver:\n  port: {}\n  index_name: {}\n",
+                port, index_name
+            ),
+        )
+        .expect("should write test config");
+    }
 
     #[test]
     fn help_short_flag_exits_before_runtime() {
@@ -297,8 +338,8 @@ mod tests {
 
     #[test]
     fn positional_question_is_accepted() {
-        let parsed = parse_cli_command_from(["md-qa", "What is Rust?"])
-            .expect("parse should succeed");
+        let parsed =
+            parse_cli_command_from(["md-qa", "What is Rust?"]).expect("parse should succeed");
         match parsed {
             CliCommand::Run(options) => {
                 assert_eq!(options.question.as_deref(), Some("What is Rust?"));
@@ -323,7 +364,57 @@ mod tests {
 
     #[test]
     fn multiple_positional_arguments_return_error() {
-        let err = parse_cli_command_from(["md-qa", "first", "second"]).expect_err("parse should fail");
+        let err =
+            parse_cli_command_from(["md-qa", "first", "second"]).expect_err("parse should fail");
         assert!(err.contains("unexpected positional argument"));
+    }
+
+    #[test]
+    fn missing_default_config_uses_built_in_defaults() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let missing_default_path = dir.path().join("config.yaml");
+        assert!(!missing_default_path.exists());
+
+        let cfg = load_runtime_config_from_paths(None, None, Some(missing_default_path))
+            .expect("should fallback to defaults");
+        assert_eq!(cfg.server.port, None);
+        assert_eq!(cfg.server.index_name, None);
+    }
+
+    #[test]
+    fn missing_explicit_config_returns_error() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let missing_explicit_path = dir.path().join("does-not-exist.yaml");
+
+        let err = load_runtime_config_from_paths(Some(missing_explicit_path.clone()), None, None)
+            .expect_err("explicit path should fail when missing");
+        assert!(err.contains("failed to load config"));
+        assert!(err.contains(&missing_explicit_path.display().to_string()));
+    }
+
+    #[test]
+    fn explicit_config_path_is_loaded() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let config_path = dir.path().join("config.yaml");
+        write_test_config(&config_path, 9876, "from-cli");
+
+        let cfg = load_runtime_config_from_paths(Some(config_path), None, None)
+            .expect("should load explicit config");
+        assert_eq!(cfg.server.port, Some(9876));
+        assert_eq!(cfg.server.index_name.as_deref(), Some("from-cli"));
+    }
+
+    #[test]
+    fn env_config_path_wins_over_default_path() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let env_path = dir.path().join("env.yaml");
+        let default_path = dir.path().join("default.yaml");
+        write_test_config(&env_path, 7777, "from-env");
+        write_test_config(&default_path, 8888, "from-default");
+
+        let cfg = load_runtime_config_from_paths(None, Some(env_path), Some(default_path))
+            .expect("should load env config");
+        assert_eq!(cfg.server.port, Some(7777));
+        assert_eq!(cfg.server.index_name.as_deref(), Some("from-env"));
     }
 }
