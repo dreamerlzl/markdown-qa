@@ -15,6 +15,17 @@ class MessageType:
     STREAM_END = "stream_end"
 
 
+def _deduplicate_paths(paths: List[str]) -> List[str]:
+    """Return first-seen unique paths while preserving order."""
+    seen: set[str] = set()
+    unique_paths: List[str] = []
+    for path in paths:
+        if path not in seen:
+            seen.add(path)
+            unique_paths.append(path)
+    return unique_paths
+
+
 def create_query_message(question: str, index: Optional[str] = None) -> Dict[str, Any]:
     """
     Create a query message.
@@ -120,7 +131,10 @@ def create_stream_end_message(sources: List[str]) -> Dict[str, Any]:
     Returns:
         Stream end message dictionary.
     """
-    return {"type": MessageType.STREAM_END, "sources": sources}
+    return {
+        "type": MessageType.STREAM_END,
+        "sources": _deduplicate_paths(sources),
+    }
 
 
 def validate_query_message(message: Dict[str, Any]) -> tuple[bool, Optional[str]]:

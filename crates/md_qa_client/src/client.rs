@@ -1,6 +1,7 @@
 //! WebSocket client: connect, send query, receive stream (STREAM_START, STREAM_CHUNK, STREAM_END).
 
 use futures_util::{SinkExt, StreamExt};
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::MaybeTlsStream;
@@ -18,6 +19,17 @@ pub enum StreamEvent {
 }
 
 type WsStream = WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>;
+
+fn deduplicate_sources(sources: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut unique = Vec::new();
+    for source in sources {
+        if seen.insert(source.clone()) {
+            unique.push(source);
+        }
+    }
+    unique
+}
 
 /// Connected WebSocket client.
 pub struct Client {
@@ -82,13 +94,14 @@ impl Client {
                 Message::Close(_) => break,
                 _ => continue,
             };
-            let value: serde_json::Value = serde_json::from_str(&text).map_err(ClientError::from)?;
+            let value: serde_json::Value =
+                serde_json::from_str(&text).map_err(ClientError::from)?;
             let server_msg = ServerMessage::from_json(&value).map_err(ClientError::from)?;
             match server_msg {
                 ServerMessage::StreamStart => events.push(StreamEvent::StreamStart),
                 ServerMessage::StreamChunk(chunk) => events.push(StreamEvent::StreamChunk(chunk)),
                 ServerMessage::StreamEnd(sources) => {
-                    events.push(StreamEvent::StreamEnd(sources));
+                    events.push(StreamEvent::StreamEnd(deduplicate_sources(sources)));
                     break;
                 }
                 ServerMessage::Error(message) => {

@@ -1,7 +1,7 @@
 //! Integration tests for WebSocket client: connect, send query, receive stream.
 //! Uses a minimal in-process WebSocket server (no mocks). Fail until task 3.3.
 
-use md_qa_client::{connect, Client, StreamEvent};
+use md_qa_client::{connect, StreamEvent};
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::net::TcpListener;
 use tokio_tungstenite::accept_async;
@@ -23,15 +23,21 @@ async fn connect_and_receive_stream() {
         use futures_util::SinkExt;
         use futures_util::StreamExt;
         write
-            .send(tokio_tungstenite::tungstenite::Message::Text(stream_start.into()))
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                stream_start.into(),
+            ))
             .await
             .unwrap();
         write
-            .send(tokio_tungstenite::tungstenite::Message::Text(stream_chunk.into()))
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                stream_chunk.into(),
+            ))
             .await
             .unwrap();
         write
-            .send(tokio_tungstenite::tungstenite::Message::Text(stream_end.into()))
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                stream_end.into(),
+            ))
             .await
             .unwrap();
         done_clone.store(true, Ordering::SeqCst);
@@ -69,6 +75,57 @@ async fn connect_and_receive_stream() {
 }
 
 #[tokio::test]
+async fn stream_end_sources_are_deduplicated() {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        let (tcp_stream, _) = listener.accept().await.unwrap();
+        let ws_stream = accept_async(tcp_stream).await.unwrap();
+        let (mut write, mut read) = ws_stream.split();
+        let _ = read.next().await;
+        let stream_start = r#"{"type":"stream_start"}"#;
+        let stream_chunk = r#"{"type":"stream_chunk","chunk":"Hello."}"#;
+        let stream_end = r#"{"type":"stream_end","sources":["/a.md","/a.md","/b.md","/a.md"]}"#;
+        use futures_util::SinkExt;
+        use futures_util::StreamExt;
+        write
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                stream_start.into(),
+            ))
+            .await
+            .unwrap();
+        write
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                stream_chunk.into(),
+            ))
+            .await
+            .unwrap();
+        write
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                stream_end.into(),
+            ))
+            .await
+            .unwrap();
+    });
+
+    let url = format!("ws://127.0.0.1:{}", port);
+    let client = connect(&url).await.expect("connect should succeed");
+    let events = client
+        .query("What is the answer?", None)
+        .await
+        .expect("query should succeed");
+
+    let end_events: Vec<_> = events
+        .iter()
+        .filter(|e| matches!(e, StreamEvent::StreamEnd(_)))
+        .collect();
+    assert_eq!(end_events.len(), 1);
+    if let StreamEvent::StreamEnd(sources) = &end_events[0] {
+        assert_eq!(sources.as_slice(), ["/a.md", "/b.md"]);
+    }
+}
+
+#[tokio::test]
 async fn receive_error_message() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -83,7 +140,9 @@ async fn receive_error_message() {
         use futures_util::SinkExt;
         use futures_util::StreamExt;
         write
-            .send(tokio_tungstenite::tungstenite::Message::Text(err_msg.into()))
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                err_msg.into(),
+            ))
             .await
             .unwrap();
         done_clone.store(true, Ordering::SeqCst);
