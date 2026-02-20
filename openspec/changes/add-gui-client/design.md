@@ -2,7 +2,7 @@
 
 ## Context
 
-The markdown Q&A system has a WebSocket server and a CLI (TUI) client. Configuration is read from `~/.md-qa/config.yaml` and environment variables; the client connects to a server URL and sends queries, receiving streamed answers and sources. Users who avoid the terminal need a graphical way to edit that config and to chat. The GUI must stay consistent with existing config format and protocol so server and TUI remain unchanged.
+The markdown Q&A system has a WebSocket server and a CLI (TUI) client. Configuration is read from `~/.md-qa/config.yaml` and environment variables; when no config file is available, the Rust TUI can run with built-in defaults. The client connects to a server URL and sends queries, receiving streamed answers and sources. Users who avoid the terminal need a graphical way to edit that config and to chat. The GUI must stay consistent with existing config format and protocol so server and TUI remain unchanged.
 
 **Current state:** `MarkdownQAClient` (async, websockets), `APIConfig` / `ServerConfig` (YAML/TOML), `ResponseFormatter`, message types in `markdown_qa.messages`. Server is started separately (e.g. `python -m markdown_qa.server`).
 
@@ -41,7 +41,7 @@ The markdown Q&A system has a WebSocket server and a CLI (TUI) client. Configura
 
 ### Config: read on startup, write on save (Rust)
 
-- **Rationale:** Config is the single source of truth. The GUI loads config at startup from `~/.md-qa/config.yaml` (Rust reads via serde_yaml), populates the form. User edits; "Save" writes back to the same YAML file, creating `~/.md-qa/` if needed. The Rust TUI reads the same config for server URL and index. Precedence (CLI args → config file → env) is preserved; Rust implements the same precedence rules for the TUI; GUI only writes the config file.
+- **Rationale:** Config is the single source of truth. The GUI loads config at startup from `~/.md-qa/config.yaml` (Rust reads via serde_yaml), populates the form. User edits; "Save" writes back to the same YAML file, creating `~/.md-qa/` if needed. The Rust TUI reads the same config for server URL and index when available. Runtime source resolution for the TUI is: `--config` → `MD_QA_CONFIG` → default config path (if file exists) → built-in defaults (port 8765, no index override). GUI only writes the config file.
 - **Format:** Use **YAML only**. The GUI and Rust TUI read and write `~/.md-qa/config.yaml` only. No TOML support in the client; this keeps the client simple and matches the primary documented format. The server may still support TOML for existing users; the GUI does not need to.
 
 ### Connect on startup (GUI)

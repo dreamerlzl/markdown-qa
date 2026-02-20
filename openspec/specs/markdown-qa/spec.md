@@ -236,24 +236,23 @@ The system SHALL provide a CLI client that connects to the server for asking que
 
 ### Scenario: Connect to server
 - **WHEN** user runs the CLI client
-- **THEN** the client connects to WebSocket server (default: `ws://localhost:8765`)
-- **AND** displays connection status
-- **AND** allows specifying custom server address via `--server` flag
+- **THEN** the client resolves runtime config in this order: `--config <PATH>` → `MD_QA_CONFIG` → `~/.md-qa/config.yaml` (if file exists)
+- **AND** if no config file source is available, the client uses built-in defaults
+- **AND** the client connects to WebSocket server using resolved config (default: `ws://127.0.0.1:8765` when built-in defaults are used)
 
 ### Scenario: Send query via CLI
-- **WHEN** user provides a question as CLI argument
+- **WHEN** user provides a question as a positional CLI argument
 - **THEN** the client sends query message to server via WebSocket
 - **AND** waits for response
 - **AND** displays answer with source citations
 - **AND** exits after displaying response
 
-### Scenario: Interactive question mode
-- **WHEN** user runs the CLI in interactive mode
-- **THEN** the client connects to server and maintains connection
-- **AND** prompts for questions repeatedly
-- **AND** sends each question to server via WebSocket
+### Scenario: Send query from stdin
+- **WHEN** user runs the CLI without a positional question
+- **THEN** the client reads one question from stdin (first line; prompts once when stdin is a terminal)
+- **AND** sends that question to server via WebSocket
 - **AND** displays answers with source citations
-- **AND** continues until user exits (Ctrl+C or "quit")
+- **AND** exits after displaying response
 
 ### Scenario: Handle server unavailable
 - **WHEN** the server is not running or unreachable
