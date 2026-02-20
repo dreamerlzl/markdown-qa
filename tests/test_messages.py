@@ -8,6 +8,7 @@ from markdown_qa.messages import (
     create_query_message,
     create_response_message,
     create_status_message,
+    create_stream_end_message,
     validate_query_message,
 )
 
@@ -55,6 +56,14 @@ class TestMessages:
         assert msg["type"] == MessageType.STATUS
         assert msg["status"] == "indexing"
         assert "message" not in msg
+
+    def test_create_stream_end_message_deduplicates_sources(self):
+        """Test stream-end sources are deduplicated in original order."""
+        msg = create_stream_end_message(
+            ["/path/to/a.md", "/path/to/a.md", "/path/to/b.md", "/path/to/a.md"]
+        )
+        assert msg["type"] == MessageType.STREAM_END
+        assert msg["sources"] == ["/path/to/a.md", "/path/to/b.md"]
 
     def test_validate_query_message_valid(self):
         """Test validating a valid query message."""
