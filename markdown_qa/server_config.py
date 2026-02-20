@@ -195,16 +195,27 @@ class ServerConfig:
         logger = get_server_logger()
 
         if not self.directories:
-            raise ValueError(
-                "No directories specified. Set MARKDOWN_QA_DIRECTORIES environment variable "
-                "or provide directories in configuration."
+            logger.warning(
+                "No directories configured. Server will start without indexed content "
+                "until valid directories are provided."
             )
+            self.directories = []
 
         # Validate each directory and check markdown file counts
         valid_directories: List[str] = []
         for directory in self.directories:
-            if not Path(directory).exists():
-                raise ValueError(f"Directory does not exist: {directory}")
+            directory_path = Path(directory)
+            if not directory_path.exists():
+                logger.warning(
+                    f"Directory does not exist and will be skipped: {directory}"
+                )
+                continue
+
+            if not directory_path.is_dir():
+                logger.warning(
+                    f"Path is not a directory and will be skipped: {directory}"
+                )
+                continue
 
             # Count markdown files in this directory
             file_count = count_markdown_files(directory)
@@ -225,9 +236,9 @@ class ServerConfig:
 
         # Update directories to only include valid ones
         if not valid_directories:
-            raise ValueError(
+            logger.warning(
                 "No valid directories remaining after validation. "
-                "All directories were skipped due to having too many files (>1000)."
+                "Server will start without indexed content."
             )
 
         self.directories = valid_directories

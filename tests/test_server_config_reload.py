@@ -252,8 +252,8 @@ class TestServerConfigReload:
                 # But reload_interval should change (no CLI override)
                 assert "reload_interval" in result.changed
 
-    def test_reload_validation_failure(self):
-        """Test that validation failures prevent reload."""
+    def test_reload_invalid_directories_are_skipped(self):
+        """Test that reload accepts invalid directories by skipping them."""
         with tempfile.TemporaryDirectory() as tmpdir:
             config_dir = Path(tmpdir)
             config_file = config_dir / "config.yaml"
@@ -286,7 +286,6 @@ class TestServerConfigReload:
                 from markdown_qa.config import APIConfig
                 api_config = APIConfig(config_file=config_file)
                 config = ServerConfig(config_file=config_file, api_config=api_config)
-                original_dirs = config.directories.copy()
 
                 # Update config file with invalid directory
                 with open(config_file, "w") as f:
@@ -299,8 +298,6 @@ class TestServerConfigReload:
                         }
                     }, f)
 
-                with pytest.raises(ValueError, match="Configuration reload failed"):
-                    config.reload(preserve_cli_overrides=False)
-
-                # Original directories should be preserved
-                assert config.directories == original_dirs
+                result = config.reload(preserve_cli_overrides=False)
+                assert "directories" in result.changed
+                assert config.directories == []
