@@ -9,9 +9,10 @@ The system SHALL load markdown files from one or more specified directories.
 - **AND** preserves file path information for each loaded file
 
 ### Scenario: Handle missing or empty directories
-- **WHEN** a specified directory does not exist or contains no markdown files
-- **THEN** the system reports an error or warning
-- **AND** continues processing other valid directories if multiple are provided
+- **WHEN** no directories are specified, or a directory does not exist or is not a directory, or all directories are skipped (e.g. over file limit)
+- **THEN** the system logs a warning and does not raise
+- **AND** skips invalid entries and keeps only valid directories; if none remain, the directory list may be empty
+- **AND** the server may start without indexed content when the directory list is empty
 
 ## Requirement: Document Chunking with Metadata
 The system SHALL split markdown content into chunks while preserving structural metadata using LangChain's MarkdownTextSplitter.
@@ -63,10 +64,8 @@ The system SHALL create a searchable vector index from markdown content.
 
 ### Scenario: Load index at server startup
 - **WHEN** the server starts up
-- **THEN** the system loads indexes from disk cache if available (or builds from scratch if not)
-- **AND** keeps indexes in memory for fast query access
-- **AND** provides progress feedback during loading if it takes > 2 seconds
-- **AND** reports server ready status when indexes are loaded
+- **THEN** if directories are configured, the system loads indexes from disk cache if available (or builds from scratch if not), keeps them in memory, provides progress feedback during loading if it takes > 2 seconds, and reports server ready when indexes are loaded; if loading fails, the system clears the index and raises so startup fails
+- **AND** if no directories are configured, the system starts without loading indexes, clears any in-memory index, and reports status indicating no indexed content (server still accepts connections)
 
 ### Scenario: Handle large indexes efficiently
 - **WHEN** an index contains hundreds of markdown files (10,000+ chunks)
